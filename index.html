@@ -1,52 +1,54 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="UTF-8">
-  <title>Dashboard de Investimentos</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<meta charset="UTF-8">
+<title>Dashboard de Investimentos</title>
 
-  <style>
-    body {
-      font-family: Arial;
-      background: #0f172a;
-      color: white;
-      padding: 20px;
-    }
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    h1 {
-      text-align: center;
-    }
+<style>
+body {
+  font-family: Arial;
+  background: #0f172a;
+  color: white;
+  padding: 20px;
+}
 
-    .cards {
-      display: flex;
-      gap: 20px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
+h1 {
+  text-align: center;
+}
 
-    .card {
-      flex: 1;
-      min-width: 200px;
-      background: #1e293b;
-      padding: 20px;
-      border-radius: 10px;
-      text-align: center;
-    }
+.cards {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
 
-    canvas {
-      background: white;
-      border-radius: 10px;
-      padding: 10px;
-      margin-top: 20px;
-    }
+.card {
+  flex: 1;
+  min-width: 200px;
+  background: #1e293b;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+}
 
-    select {
-      padding: 8px;
-      margin-bottom: 20px;
-      border-radius: 6px;
-    }
-  </style>
+canvas {
+  background: white;
+  border-radius: 10px;
+  padding: 10px;
+  margin-top: 20px;
+}
+
+select {
+  padding: 8px;
+  margin-bottom: 20px;
+  border-radius: 6px;
+}
+</style>
 </head>
+
 <body>
 
 <h1>📊 Dashboard de Investimentos</h1>
@@ -63,6 +65,10 @@
   <div class="card">
     <h3>📊 Nº de Operações</h3>
     <p id="operacoes">-</p>
+  </div>
+  <div class="card">
+    <h3>📈 Resultado (PnL)</h3>
+    <p id="pnl">-</p>
   </div>
 </div>
 
@@ -83,7 +89,6 @@ async function fetchData() {
 
 function parseCSV(data) {
   const linhas = data.trim().split("\n");
-
   const separador = linhas[0].includes(";") ? ";" : ",";
 
   const rows = linhas.map(r => r.split(separador));
@@ -104,21 +109,59 @@ function parseValor(valor) {
   ) || 0;
 }
 
+// 🔥 FUNÇÃO CORRIGIDA (NUNCA QUEBRA)
+function enrichRows(data) {
+  return data.map(d => {
+    const qty = parseValor(d["Quantidade"]);
+    const avgPrice = parseValor(d["Preço Médio"]);
+    const curPrice = parseValor(d["Preço Atual"]);
+    const totalVal = parseValor(d["Valor Total"]);
+
+    const cost =
+      (!isNaN(qty) && !isNaN(avgPrice) && qty > 0)
+        ? qty * avgPrice
+        : totalVal;
+
+    const marketValue =
+      (!isNaN(qty) && !isNaN(curPrice) && qty > 0)
+        ? qty * curPrice
+        : totalVal;
+
+    const pnl =
+      (!isNaN(marketValue) && !isNaN(cost))
+        ? marketValue - cost
+        : 0;
+
+    return {
+      ...d,
+      _ativo: d["Ativo"],
+      _data: d["Data"],
+      _valor: totalVal,
+      _cost: cost,
+      _marketValue: marketValue,
+      _pnl: pnl
+    };
+  });
+}
+
 function calcularIndicadores(data) {
   let total = 0;
+  let pnl = 0;
 
   data.forEach(d => {
-    total += parseValor(d["Valor Total"]);
+    total += d._cost || 0;
+    pnl += d._pnl || 0;
   });
 
   return {
-    total: total.toFixed(2),
+    total: total,
+    pnl: pnl,
     operacoes: data.length
   };
 }
 
 function popularFiltro(data) {
-  const ativos = [...new Set(data.map(d => d["Ativo"]).filter(Boolean))];
+  const ativos = [...new Set(data.map(d => d._ativo).filter(Boolean))];
   const select = document.getElementById("filtroAtivo");
 
   ativos.forEach(a => {
@@ -133,18 +176,14 @@ function gerarGraficoLinha(data) {
   const agrupado = {};
 
   data.forEach(d => {
-    const dataKey = d["Data"];
-    const valor = parseValor(d["Valor Total"]);
+    if (!d._data) return;
 
-    if (!dataKey) return;
+    if (!agrupado[d._data]) agrupado[d._data] = 0;
 
-    if (!agrupado[dataKey]) agrupado[dataKey] = 0;
-
-    agrupado[dataKey] += valor;
+    agrupado[d._data] += d._cost;
   });
 
-  const datas = Object.keys(agrupado)
-    .sort((a, b) => new Date(a) - new Date(b));
+  const datas = Object.keys(agrupado).sort((a, b) => new Date(a) - new Date(b));
 
   let acumulado = 0;
 
@@ -160,7 +199,7 @@ function gerarGraficoLinha(data) {
     data: {
       labels: datas,
       datasets: [{
-        label: "Aportes acumulados",
+        label: "Capital Investido",
         data: valores,
         tension: 0.3
       }]
@@ -172,12 +211,9 @@ function gerarPizza(data) {
   const agrupado = {};
 
   data.forEach(d => {
-    const ativo = d["Ativo"];
-    const valor = parseValor(d["Valor Total"]);
+    if (!d._ativo) return;
 
-    if (!ativo) return;
-
-    agrupado[ativo] = (agrupado[ativo] || 0) + valor;
+    agrupado[d._ativo] = (agrupado[d._ativo] || 0) + d._cost;
   });
 
   if (pizzaChart) pizzaChart.destroy();
@@ -198,24 +234,28 @@ function aplicarFiltro(data) {
 
   if (filtro === "Todos") return data;
 
-  return data.filter(d => d["Ativo"] === filtro);
+  return data.filter(d => d._ativo === filtro);
 }
 
 async function init() {
-  let data = await fetchData();
+  let raw = await fetchData();
+  let data = enrichRows(raw);
 
   popularFiltro(data);
 
   function render() {
     let filtrado = aplicarFiltro(data);
 
-    const indicadores = calcularIndicadores(filtrado);
+    const ind = calcularIndicadores(filtrado);
 
     document.getElementById("total").innerText =
-      "R$ " + Number(indicadores.total).toLocaleString("pt-BR");
+      "R$ " + ind.total.toLocaleString("pt-BR", {minimumFractionDigits: 2});
 
     document.getElementById("operacoes").innerText =
-      indicadores.operacoes;
+      ind.operacoes;
+
+    document.getElementById("pnl").innerText =
+      "R$ " + ind.pnl.toLocaleString("pt-BR", {minimumFractionDigits: 2});
 
     gerarGraficoLinha(filtrado);
     gerarPizza(filtrado);
