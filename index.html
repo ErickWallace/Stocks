@@ -1,0 +1,1699 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard · Carteira de Investimentos</title>
+
+<!-- Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- PapaParse for CSV -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+<style>
+/* ============================================
+   DESIGN SYSTEM — Dark Financial Terminal
+   Aesthetic: Bloomberg meets Figma Dark Mode
+   Fonts: Sora (headings) + JetBrains Mono (data)
+   ============================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --bg-0: #080c14;
+  --bg-1: #0d1220;
+  --bg-2: #111827;
+  --bg-3: #1a2236;
+  --bg-card: #111827;
+  --border: rgba(255,255,255,0.07);
+  --border-active: rgba(99,179,237,0.4);
+
+  --text-primary: #e8edf5;
+  --text-secondary: #8899b4;
+  --text-muted: #4a5a72;
+
+  --accent-blue: #63b3ed;
+  --accent-cyan: #4fd1c5;
+  --accent-green: #48bb78;
+  --accent-red: #fc8181;
+  --accent-yellow: #f6e05e;
+  --accent-purple: #b794f4;
+  --accent-orange: #f6ad55;
+
+  --positive: #48bb78;
+  --negative: #fc8181;
+  --neutral: #63b3ed;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 48px rgba(0,0,0,0.6);
+
+  --font-head: 'Sora', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-head);
+  background: var(--bg-0);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Background grid texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(99,179,237,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99,179,237,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── HEADER ──────────────────────────────── */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(8,12,20,0.92);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-logo {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+
+.header-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.header-title span {
+  color: var(--accent-blue);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.last-update {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dot-live {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.btn-refresh {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--font-head);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex; align-items: center; gap: 6px;
+}
+
+.btn-refresh:hover {
+  background: var(--bg-card);
+  border-color: var(--border-active);
+  color: var(--accent-blue);
+}
+
+.btn-refresh.loading .refresh-icon { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── LAYOUT ──────────────────────────────── */
+.app {
+  position: relative;
+  z-index: 1;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* ─── LOADING / ERROR STATES ──────────────── */
+.state-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
+  text-align: center;
+}
+
+.loader {
+  width: 48px; height: 48px;
+  border: 3px solid var(--bg-3);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.state-screen h2 {
+  font-size: 18px; font-weight: 600;
+  color: var(--text-primary);
+}
+
+.state-screen p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+.error-box {
+  background: rgba(252,129,129,0.08);
+  border: 1px solid rgba(252,129,129,0.3);
+  border-radius: var(--radius);
+  padding: 20px 28px;
+  max-width: 500px;
+}
+
+.error-box code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-red);
+  display: block;
+  margin-top: 8px;
+  word-break: break-all;
+}
+
+/* ─── SECTION LABEL ───────────────────────── */
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  margin-top: 28px;
+}
+
+/* ─── KPI CARDS ───────────────────────────── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.15s;
+  animation: fadeUp 0.4s ease both;
+}
+
+.kpi-card:hover {
+  border-color: var(--border-active);
+  transform: translateY(-2px);
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--kpi-accent, var(--accent-blue));
+  opacity: 0.7;
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.kpi-value {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.kpi-value.positive { color: var(--positive); }
+.kpi-value.negative { color: var(--negative); }
+
+.kpi-sub {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.kpi-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.kpi-badge.positive {
+  background: rgba(72,187,120,0.15);
+  color: var(--positive);
+}
+
+.kpi-badge.negative {
+  background: rgba(252,129,129,0.15);
+  color: var(--negative);
+}
+
+/* ─── CHARTS GRID ─────────────────────────── */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.charts-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.chart-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  animation: fadeUp 0.5s ease both;
+}
+
+.chart-card.full { grid-column: 1 / -1; }
+
+.chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chart-title-icon {
+  font-size: 16px;
+  margin-right: 6px;
+}
+
+.chart-wrap {
+  position: relative;
+  width: 100%;
+}
+
+/* ─── FILTERS BAR ─────────────────────────── */
+.filters-bar {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  animation: fadeUp 0.3s ease both;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.filter-select, .filter-input {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: var(--font-head);
+  cursor: pointer;
+  transition: border-color 0.2s;
+  min-width: 130px;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.filter-select:hover, .filter-input:hover,
+.filter-select:focus, .filter-input:focus {
+  outline: none;
+  border-color: var(--border-active);
+}
+
+.filter-select option {
+  background: var(--bg-2);
+  color: var(--text-primary);
+}
+
+.btn-reset {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--font-head);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-reset:hover {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+/* ─── TABLE ───────────────────────────────── */
+.table-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  animation: fadeUp 0.6s ease both;
+  margin-bottom: 24px;
+}
+
+.table-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.table-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.table-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-2);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.table-scroll { overflow-x: auto; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+thead th {
+  background: var(--bg-2);
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  position: sticky;
+  top: 0;
+  transition: color 0.2s;
+}
+
+thead th:hover { color: var(--accent-blue); }
+
+thead th.sorted-asc::after { content: ' ↑'; color: var(--accent-blue); }
+thead th.sorted-desc::after { content: ' ↓'; color: var(--accent-blue); }
+
+tbody tr {
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s;
+}
+
+tbody tr:hover { background: rgba(255,255,255,0.03); }
+
+tbody td {
+  padding: 11px 16px;
+  white-space: nowrap;
+}
+
+.td-ticker {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--accent-blue);
+  letter-spacing: 0.02em;
+}
+
+.td-number {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
+}
+
+.td-positive { color: var(--positive); }
+.td-negative { color: var(--negative); }
+.td-neutral   { color: var(--text-secondary); }
+
+.sector-badge {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(99,179,237,0.12);
+  color: var(--accent-blue);
+}
+
+/* row highlight — best / worst */
+.row-best td:first-child { border-left: 3px solid var(--positive); }
+.row-worst td:first-child { border-left: 3px solid var(--negative); }
+
+/* ─── BENCHMARK ───────────────────────────── */
+.benchmark-strip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  animation: fadeUp 0.35s ease both;
+}
+
+.benchmark-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.benchmark-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.benchmark-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.benchmark-val {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.benchmark-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ─── HIGHLIGHT CARDS ─────────────────────── */
+.highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.hl-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+  animation: fadeUp 0.45s ease both;
+}
+
+.hl-card.best { border-color: rgba(72,187,120,0.3); }
+.hl-card.worst { border-color: rgba(252,129,129,0.3); }
+
+.hl-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+
+.hl-ticker {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.hl-ticker.positive { color: var(--positive); }
+.hl-ticker.negative { color: var(--negative); }
+
+.hl-pct {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+
+/* ─── ANIMATIONS ──────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── RESPONSIVE ──────────────────────────── */
+@media (max-width: 900px) {
+  .charts-grid { grid-template-columns: 1fr; }
+  .charts-grid-3 { grid-template-columns: 1fr 1fr; }
+  .app { padding: 16px; }
+}
+
+@media (max-width: 600px) {
+  .charts-grid-3 { grid-template-columns: 1fr; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .header-title { display: none; }
+  .filters-bar { flex-direction: column; align-items: flex-start; }
+  .btn-reset { margin-left: 0; }
+}
+
+/* ─── SCHEMA WARNING ──────────────────────── */
+.schema-warn {
+  background: rgba(246,224,94,0.07);
+  border: 1px solid rgba(246,224,94,0.25);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  font-size: 13px;
+  color: var(--accent-yellow);
+  margin-bottom: 12px;
+}
+
+.schema-warn strong { font-weight: 700; }
+.schema-warn code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: rgba(246,224,94,0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* ─── COLUMN MAP MODAL ────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(8px);
+  z-index: 500;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.modal {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px;
+  max-width: 520px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal h2 {
+  font-size: 16px; font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.modal p {
+  font-size: 13px; color: var(--text-secondary);
+  margin-bottom: 20px; line-height: 1.6;
+}
+
+.modal-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.modal-field label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.modal-field select {
+  width: 100%;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: var(--font-head);
+  cursor: pointer;
+}
+
+.modal-field select:focus {
+  outline: none;
+  border-color: var(--border-active);
+}
+
+.modal-actions {
+  display: flex; gap: 10px; justify-content: flex-end;
+}
+
+.btn-primary {
+  background: var(--accent-blue);
+  color: #0a0f1a;
+  border: none;
+  padding: 10px 22px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-head);
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-primary:hover { opacity: 0.85; }
+
+.btn-secondary {
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 10px 22px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-family: var(--font-head);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover { border-color: var(--border-active); color: var(--text-primary); }
+
+/* ─── EMPTY STATE ─────────────────────────── */
+.empty-row td {
+  text-align: center;
+  padding: 32px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+</style>
+</head>
+
+<body>
+
+<!-- ══════════ HEADER ══════════ -->
+<header class="header">
+  <div class="header-brand">
+    <div class="header-logo">📈</div>
+    <div class="header-title">Carteira <span>Investimentos</span></div>
+  </div>
+  <div class="header-right">
+    <div class="last-update">
+      <span class="dot-live"></span>
+      <span id="lastUpdate">—</span>
+    </div>
+    <button class="btn-refresh" id="btnRefresh" onclick="loadData()">
+      <span class="refresh-icon">⟳</span> Atualizar
+    </button>
+  </div>
+</header>
+
+<!-- ══════════ COLUMN MAP MODAL ══════════ -->
+<div class="modal-overlay" id="mapModal" style="display:none">
+  <div class="modal">
+    <h2>🔧 Mapear Colunas da Planilha</h2>
+    <p>Não conseguimos identificar automaticamente as colunas. Selecione quais colunas correspondem a cada campo abaixo. Campos obrigatórios estão marcados com *.</p>
+    <div class="modal-fields" id="modalFields"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="document.getElementById('mapModal').style.display='none'">Cancelar</button>
+      <button class="btn-primary" onclick="applyColumnMap()">Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ MAIN APP ══════════ -->
+<main class="app" id="app">
+
+  <!-- Loading state -->
+  <div class="state-screen" id="stateLoading">
+    <div class="loader"></div>
+    <h2>Carregando dados...</h2>
+    <p>Buscando informações da sua planilha Google Sheets.</p>
+  </div>
+
+  <!-- Error state -->
+  <div class="state-screen" id="stateError" style="display:none">
+    <div class="error-box">
+      <h2>⚠️ Erro ao carregar planilha</h2>
+      <p id="errorMsg" style="color:var(--text-secondary);font-size:13px;margin-top:8px;line-height:1.6"></p>
+      <code id="errorCode"></code>
+    </div>
+    <button class="btn-refresh" onclick="loadData()" style="margin-top:16px">Tentar novamente</button>
+  </div>
+
+  <!-- Dashboard (hidden until data loads) -->
+  <div id="dashboard" style="display:none">
+
+    <!-- Schema warning -->
+    <div class="schema-warn" id="schemaWarn" style="display:none">
+      ⚠️ <strong>Colunas não mapeadas automaticamente.</strong>
+      Colunas detectadas: <code id="detectedCols"></code>.
+      <a href="#" style="color:var(--accent-yellow);margin-left:8px" onclick="openMapModal();return false">Configurar mapeamento →</a>
+    </div>
+
+    <!-- KPIs -->
+    <div class="section-label">Visão Geral</div>
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <!-- Best / Worst -->
+    <div class="section-label">Destaques</div>
+    <div class="highlight-grid" id="highlightGrid"></div>
+
+    <!-- Benchmark strip -->
+    <div class="benchmark-strip" id="benchmarkStrip" style="display:none">
+      <span class="benchmark-label">Benchmark</span>
+      <div id="benchmarkItems"></div>
+      <span class="benchmark-note">* Dados de benchmark via API pública. Pode haver atraso.</span>
+    </div>
+
+    <!-- Filters -->
+    <div class="section-label">Filtros</div>
+    <div class="filters-bar" id="filtersBar">
+      <div class="filter-group">
+        <span class="filter-label">Ativo</span>
+        <select class="filter-select" id="filterTicker" onchange="applyFilters()">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Setor</span>
+        <select class="filter-select" id="filterSector" onchange="applyFilters()">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Resultado</span>
+        <select class="filter-select" id="filterResult" onchange="applyFilters()">
+          <option value="">Todos</option>
+          <option value="positive">Positivos</option>
+          <option value="negative">Negativos</option>
+        </select>
+      </div>
+      <button class="btn-reset" onclick="resetFilters()">✕ Limpar filtros</button>
+    </div>
+
+    <!-- Charts row 1: Evolution + Allocation -->
+    <div class="section-label">Gráficos</div>
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title"><span><span class="chart-title-icon">📈</span>Evolução do Patrimônio</span></div>
+        <div class="chart-wrap"><canvas id="chartEvolution" height="220"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title"><span><span class="chart-title-icon">🥧</span>Distribuição por Ativo</span></div>
+        <div class="chart-wrap"><canvas id="chartAllocation" height="220"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Charts row 2: ROI bar + Sector donut + P&L bar -->
+    <div class="charts-grid-3">
+      <div class="chart-card">
+        <div class="chart-title"><span><span class="chart-title-icon">📊</span>ROI por Ativo (%)</span></div>
+        <div class="chart-wrap"><canvas id="chartRoi" height="260"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title"><span><span class="chart-title-icon">🏷️</span>Distribuição por Setor</span></div>
+        <div class="chart-wrap"><canvas id="chartSector" height="260"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title"><span><span class="chart-title-icon">💰</span>Ganho / Perda por Ativo (R$)</span></div>
+        <div class="chart-wrap"><canvas id="chartPnl" height="260"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Metrics: Drawdown chart -->
+    <div class="charts-grid" id="drawdownSection" style="display:none">
+      <div class="chart-card full">
+        <div class="chart-title"><span><span class="chart-title-icon">📉</span>Drawdown (%)</span></div>
+        <div class="chart-wrap"><canvas id="chartDrawdown" height="140"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Asset table -->
+    <div class="section-label">Composição da Carteira</div>
+    <div class="table-card">
+      <div class="table-header">
+        <span class="table-title">📋 Posições</span>
+        <span class="table-count" id="tableCount">0 ativos</span>
+      </div>
+      <div class="table-scroll">
+        <table id="assetsTable">
+          <thead id="tableHead"></thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /dashboard -->
+</main>
+
+<!-- ══════════ MAIN SCRIPT ══════════ -->
+<script>
+// ─────────────────────────────────────────────
+//  CONFIG
+// ─────────────────────────────────────────────
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQe-6MygeRUixx0XOdtZrSvlgvBrx82peKMF8tp9IkC_bZkSR_vANXNW3GjuZNkeApQS16AAWQORbHs/pub?output=csv";
+const AUTO_REFRESH_MINUTES = 5;
+
+// Chart.js global defaults
+Chart.defaults.color = '#8899b4';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 11;
+Chart.defaults.plugins.legend.labels.boxWidth = 10;
+Chart.defaults.plugins.legend.labels.padding = 14;
+
+// Palette
+const PALETTE = [
+  '#63b3ed','#4fd1c5','#b794f4','#f6ad55','#fc8181',
+  '#68d391','#f6e05e','#76e4f7','#f687b3','#9ae6b4',
+  '#fbd38d','#a3bffa','#e9d8fd','#bee3f8','#c6f6d5'
+];
+
+// ─────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────
+let rawRows = [];         // all parsed rows (objects)
+let colMap = {};          // { ticker, qty, avgPrice, curPrice, sector, date, name }
+let filteredRows = [];
+let charts = {};
+let sortState = { col: null, asc: true };
+
+// ─────────────────────────────────────────────
+//  AUTO-DETECT COLUMN MAPPING
+// ─────────────────────────────────────────────
+const COL_ALIASES = {
+  ticker:   ['ticker','ativo','código','code','symbol','papel','stock','acão','ação','ações'],
+  qty:      ['qty','qtd','quantidade','quant','shares','cotas','amount','qnt'],
+  avgPrice: ['preço médio','precomedio','avgprice','preco_medio','preco medio','custo médio','custo medio','pm','preco_compra','preco compra','purchase price','cost'],
+  curPrice: ['preço atual','precoa tual','curprice','preco_atual','preco atual','cotação','cotacao','current price','last price','price','preco'],
+  sector:   ['setor','sector','categoria','category','tipo','type','classe','class','segmento'],
+  date:     ['data','date','data compra','purchase date','data_compra','dt','data inicio','data_inicio'],
+  name:     ['nome','name','empresa','company','description','descrição'],
+  pnlReal:  ['ganho realizado','realized','pnl realizado','lucro realizado','resultado realizado'],
+  totalVal: ['valor total','total value','posição','posicao','patrimônio','patrimonio','market value','total'],
+};
+
+function detectColMap(headers) {
+  const map = {};
+  const norm = h => h.toLowerCase().trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9\s]/g,'').trim();
+
+  headers.forEach(h => {
+    const n = norm(h);
+    for (const [field, aliases] of Object.entries(COL_ALIASES)) {
+      if (map[field]) continue;
+      if (aliases.some(a => n === norm(a) || n.includes(norm(a)))) {
+        map[field] = h;
+      }
+    }
+  });
+  return map;
+}
+
+// ─────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────
+function fmtCurrency(v, prefix='R$') {
+  if (v == null || isNaN(v)) return '—';
+  return prefix + ' ' + v.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function fmtPct(v) {
+  if (v == null || isNaN(v)) return '—';
+  return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+}
+
+function parseNum(v) {
+  if (v == null || v === '') return NaN;
+  // Handle "1.234,56" (BR) and "1,234.56" (US)
+  const s = String(v).trim().replace(/\s/g,'');
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) return parseFloat(s.replace(/\./g,'').replace(',','.'));
+  if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) return parseFloat(s.replace(/,/g,''));
+  return parseFloat(s.replace(',','.'));
+}
+
+function parseDate(v) {
+  if (!v) return null;
+  // Supports dd/mm/yyyy, yyyy-mm-dd, dd-mm-yyyy, mm/dd/yyyy
+  const s = String(v).trim();
+  let m;
+  if ((m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/))) return new Date(`${m[3]}-${m[2]}-${m[1]}`);
+  if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/))) return new Date(s);
+  if ((m = s.match(/^(\d{2})-(\d{2})-(\d{4})$/))) return new Date(`${m[3]}-${m[2]}-${m[1]}`);
+  return new Date(s);
+}
+
+function cv(row, field) {
+  const col = colMap[field];
+  return col ? row[col] : undefined;
+}
+
+function getNum(row, field) { return parseNum(cv(row, field)); }
+
+// ─────────────────────────────────────────────
+//  ENRICH ROWS  (compute derived fields)
+// ─────────────────────────────────────────────
+function enrichRows(rows) {
+  return rows.map(r => {
+    const qty      = getNum(r, 'qty');
+    const avgPrice = getNum(r, 'avgPrice');
+    const curPrice = getNum(r, 'curPrice');
+    const totalVal = colMap.totalVal ? getNum(r, 'totalVal') : NaN;
+
+    const cost        = (!isNaN(qty) && !isNaN(avgPrice)) ? qty * avgPrice : NaN;
+    const marketValue = !isNaN(totalVal) ? totalVal
+                      : (!isNaN(qty) && !isNaN(curPrice)) ? qty * curPrice
+                      : NaN;
+    const pnl         = (!isNaN(marketValue) && !isNaN(cost)) ? marketValue - cost : NaN;
+    const roi         = (!isNaN(pnl) && !isNaN(cost) && cost !== 0) ? (pnl / cost) * 100 : NaN;
+
+    const dateRaw  = cv(r, 'date');
+    const dateObj  = dateRaw ? parseDate(dateRaw) : null;
+
+    return {
+      ...r,
+      _ticker:      String(cv(r,'ticker') || cv(r,'name') || '?').trim(),
+      _sector:      String(cv(r,'sector') || 'N/D').trim(),
+      _qty:         qty,
+      _avgPrice:    avgPrice,
+      _curPrice:    curPrice,
+      _cost:        cost,
+      _marketValue: marketValue,
+      _pnl:         pnl,
+      _roi:         roi,
+      _date:        dateObj,
+    };
+  }).filter(r => r._ticker && r._ticker !== '?');
+}
+
+// ─────────────────────────────────────────────
+//  LOAD DATA
+// ─────────────────────────────────────────────
+async function loadData() {
+  setLoading(true);
+  const btn = document.getElementById('btnRefresh');
+  btn.classList.add('loading');
+
+  try {
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(CSV_URL)}`;
+    const urls = [CSV_URL, proxyUrl];
+    let text = null;
+
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (res.ok) { text = await res.text(); break; }
+      } catch(_) {}
+    }
+
+    if (!text) throw new Error('Não foi possível acessar a planilha. Certifique-se de que o link de publicação CSV está correto e acessível publicamente.');
+
+    const result = Papa.parse(text, {
+      header: true, skipEmptyLines: true, dynamicTyping: false,
+    });
+
+    if (!result.data || result.data.length === 0)
+      throw new Error('A planilha está vazia ou o CSV não pôde ser interpretado.');
+
+    const headers = result.meta.fields || [];
+    colMap = detectColMap(headers);
+
+    // Check we have at least ticker + (price or value)
+    const hasMinData = colMap.ticker && (colMap.curPrice || colMap.totalVal || colMap.avgPrice);
+    if (!hasMinData) {
+      document.getElementById('detectedCols').textContent = headers.join(', ');
+      document.getElementById('schemaWarn').style.display = 'block';
+      openMapModal(headers);
+    } else {
+      document.getElementById('schemaWarn').style.display = 'none';
+    }
+
+    rawRows = enrichRows(result.data);
+    filteredRows = [...rawRows];
+
+    buildFilters();
+    renderDashboard();
+    document.getElementById('lastUpdate').textContent =
+      'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+
+    setLoading(false);
+  } catch(e) {
+    showError(e.message, e.toString());
+  }
+
+  btn.classList.remove('loading');
+}
+
+// ─────────────────────────────────────────────
+//  STATE MANAGEMENT
+// ─────────────────────────────────────────────
+function setLoading(loading) {
+  document.getElementById('stateLoading').style.display = loading ? 'flex' : 'none';
+  document.getElementById('stateError').style.display   = 'none';
+  document.getElementById('dashboard').style.display    = loading ? 'none' : 'block';
+}
+
+function showError(msg, code='') {
+  document.getElementById('stateLoading').style.display = 'none';
+  document.getElementById('stateError').style.display   = 'flex';
+  document.getElementById('dashboard').style.display    = 'none';
+  document.getElementById('errorMsg').textContent       = msg;
+  document.getElementById('errorCode').textContent      = code;
+}
+
+// ─────────────────────────────────────────────
+//  COLUMN MAP MODAL
+// ─────────────────────────────────────────────
+let _modalHeaders = [];
+function openMapModal(headers) {
+  if (headers) _modalHeaders = headers;
+  const fields = [
+    { key:'ticker',   label:'Ticker / Ativo *' },
+    { key:'qty',      label:'Quantidade' },
+    { key:'avgPrice', label:'Preço Médio / Custo' },
+    { key:'curPrice', label:'Preço Atual *' },
+    { key:'sector',   label:'Setor / Categoria' },
+    { key:'date',     label:'Data de Compra' },
+    { key:'totalVal', label:'Valor Total / Posição' },
+    { key:'name',     label:'Nome da Empresa' },
+  ];
+
+  const opts = ['<option value="">— não mapear —</option>',
+    ..._modalHeaders.map(h => `<option value="${h}">${h}</option>`)].join('');
+
+  document.getElementById('modalFields').innerHTML = fields.map(f => `
+    <div class="modal-field">
+      <label>${f.label}</label>
+      <select id="mf_${f.key}">${opts}</select>
+    </div>`).join('');
+
+  // Pre-select detected mappings
+  fields.forEach(f => {
+    if (colMap[f.key]) {
+      const el = document.getElementById('mf_'+f.key);
+      if (el) el.value = colMap[f.key];
+    }
+  });
+
+  document.getElementById('mapModal').style.display = 'flex';
+}
+
+function applyColumnMap() {
+  ['ticker','qty','avgPrice','curPrice','sector','date','totalVal','name'].forEach(k => {
+    const el = document.getElementById('mf_'+k);
+    if (el && el.value) colMap[k] = el.value;
+    else if (el) delete colMap[k];
+  });
+  document.getElementById('mapModal').style.display = 'none';
+  document.getElementById('schemaWarn').style.display = 'none';
+  rawRows = enrichRows(rawRows.map(r => r));
+  filteredRows = [...rawRows];
+  buildFilters();
+  renderDashboard();
+}
+
+// ─────────────────────────────────────────────
+//  FILTERS
+// ─────────────────────────────────────────────
+function buildFilters() {
+  const tickers = [...new Set(rawRows.map(r=>r._ticker))].sort();
+  const sectors = [...new Set(rawRows.map(r=>r._sector))].sort();
+
+  const populateSel = (id, opts) => {
+    const el = document.getElementById(id);
+    const prev = el.value;
+    el.innerHTML = '<option value="">Todos</option>' +
+      opts.map(o=>`<option value="${o}">${o}</option>`).join('');
+    if (opts.includes(prev)) el.value = prev;
+  };
+
+  populateSel('filterTicker', tickers);
+  populateSel('filterSector', sectors);
+}
+
+function applyFilters() {
+  const ticker = document.getElementById('filterTicker').value;
+  const sector = document.getElementById('filterSector').value;
+  const result = document.getElementById('filterResult').value;
+
+  filteredRows = rawRows.filter(r => {
+    if (ticker && r._ticker !== ticker) return false;
+    if (sector && r._sector !== sector) return false;
+    if (result === 'positive' && (isNaN(r._pnl) || r._pnl <= 0)) return false;
+    if (result === 'negative' && (isNaN(r._pnl) || r._pnl >= 0)) return false;
+    return true;
+  });
+
+  renderDashboard();
+}
+
+function resetFilters() {
+  ['filterTicker','filterSector','filterResult'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  filteredRows = [...rawRows];
+  renderDashboard();
+}
+
+// ─────────────────────────────────────────────
+//  RENDER DASHBOARD
+// ─────────────────────────────────────────────
+function renderDashboard() {
+  renderKPIs();
+  renderHighlights();
+  renderTable();
+  renderChartAllocation();
+  renderChartROI();
+  renderChartPnL();
+  renderChartSector();
+  renderChartEvolution();
+}
+
+// ── KPIs ──────────────────────────────────────
+function renderKPIs() {
+  const rows = filteredRows;
+
+  const totalInvested = rows.reduce((s,r) => s + (isNaN(r._cost) ? 0 : r._cost), 0);
+  const totalMkt      = rows.reduce((s,r) => s + (isNaN(r._marketValue) ? 0 : r._marketValue), 0);
+  const totalPnL      = totalMkt - totalInvested;
+  const totalROI      = totalInvested > 0 ? (totalPnL / totalInvested) * 100 : NaN;
+  const numAssets     = rows.length;
+
+  // CAGR: use earliest date if available
+  let cagr = NaN;
+  const datedRows = rows.filter(r => r._date instanceof Date && !isNaN(r._date));
+  if (datedRows.length && totalInvested > 0 && !isNaN(totalROI)) {
+    const earliest = new Date(Math.min(...datedRows.map(r=>r._date.getTime())));
+    const years = (Date.now() - earliest.getTime()) / (365.25 * 86400000);
+    if (years > 0.01) cagr = (Math.pow(totalMkt / totalInvested, 1/years) - 1) * 100;
+  }
+
+  const kpis = [
+    {
+      label:'Patrimônio Atual',
+      value: fmtCurrency(totalMkt),
+      sub: `Investido: ${fmtCurrency(totalInvested)}`,
+      accent: 'var(--accent-blue)',
+    },
+    {
+      label:'Resultado (P&L)',
+      value: fmtCurrency(totalPnL),
+      valueClass: totalPnL >= 0 ? 'positive' : 'negative',
+      badge: !isNaN(totalROI) ? fmtPct(totalROI) : null,
+      badgeClass: totalROI >= 0 ? 'positive' : 'negative',
+      accent: totalPnL >= 0 ? 'var(--positive)' : 'var(--negative)',
+    },
+    {
+      label:'ROI Total',
+      value: isNaN(totalROI) ? '—' : fmtPct(totalROI),
+      valueClass: totalROI >= 0 ? 'positive' : 'negative',
+      sub: 'Retorno sobre o capital',
+      accent: 'var(--accent-cyan)',
+    },
+    {
+      label:'CAGR',
+      value: isNaN(cagr) ? '—' : fmtPct(cagr),
+      valueClass: !isNaN(cagr) && cagr >= 0 ? 'positive' : 'negative',
+      sub: 'Crescimento anual composto',
+      accent: 'var(--accent-purple)',
+    },
+    {
+      label:'Ativos',
+      value: numAssets,
+      sub: `${[...new Set(rows.map(r=>r._sector))].length} setores`,
+      accent: 'var(--accent-yellow)',
+    },
+  ];
+
+  document.getElementById('kpiGrid').innerHTML = kpis.map(k => `
+    <div class="kpi-card" style="--kpi-accent:${k.accent||'var(--accent-blue)'}">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value ${k.valueClass||''}">${k.value}</div>
+      ${k.badge ? `<div class="kpi-badge ${k.badgeClass||''}">${k.badge}</div>` : ''}
+      ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
+    </div>`).join('');
+}
+
+// ── HIGHLIGHTS ────────────────────────────────
+function renderHighlights() {
+  const valid = filteredRows.filter(r => !isNaN(r._roi));
+  if (!valid.length) { document.getElementById('highlightGrid').innerHTML=''; return; }
+
+  const sorted = [...valid].sort((a,b)=>b._roi-a._roi);
+  const best  = sorted[0];
+  const worst = sorted[sorted.length-1];
+  const biggestPos = [...filteredRows].filter(r=>!isNaN(r._marketValue))
+    .sort((a,b)=>b._marketValue-a._marketValue)[0];
+
+  const items = [
+    { label:'🏆 Melhor Desempenho', row:best,  cls:'best',  valCls:'positive' },
+    { label:'⚠️ Pior Desempenho',   row:worst, cls:'worst', valCls:'negative' },
+    { label:'💼 Maior Posição',     row:biggestPos, cls:'', valCls:'neutral' },
+  ];
+
+  document.getElementById('highlightGrid').innerHTML = items.map(it => {
+    if (!it.row) return '';
+    return `<div class="hl-card ${it.cls}">
+      <div class="hl-label">${it.label}</div>
+      <div class="hl-ticker ${it.valCls}">${it.row._ticker}</div>
+      <div class="hl-pct">${!isNaN(it.row._roi) ? fmtPct(it.row._roi) : ''} ${!isNaN(it.row._pnl) ? '· '+fmtCurrency(it.row._pnl) : ''}</div>
+      ${it.row._sector !== 'N/D' ? `<div style="margin-top:8px"><span class="sector-badge">${it.row._sector}</span></div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ── TABLE ─────────────────────────────────────
+function renderTable() {
+  const rows = filteredRows;
+  document.getElementById('tableCount').textContent = rows.length + ' ativo' + (rows.length!==1?'s':'');
+
+  // Sort
+  let sorted = [...rows];
+  if (sortState.col) {
+    sorted.sort((a,b)=>{
+      let av = a[sortState.col], bv = b[sortState.col];
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return sortState.asc ? -1 : 1;
+      if (av > bv) return sortState.asc ? 1 : -1;
+      return 0;
+    });
+  }
+
+  // Find best/worst ROI for highlighting
+  const rois = sorted.map(r=>r._roi).filter(v=>!isNaN(v));
+  const bestROI  = Math.max(...rois);
+  const worstROI = Math.min(...rois);
+
+  const cols = [
+    { key:'_ticker',      label:'Ticker',        type:'ticker' },
+    { key:'_sector',      label:'Setor',         type:'sector' },
+    { key:'_qty',         label:'Qtd',           type:'num' },
+    { key:'_avgPrice',    label:'P. Médio',      type:'currency' },
+    { key:'_curPrice',    label:'P. Atual',      type:'currency' },
+    { key:'_cost',        label:'Custo Total',   type:'currency' },
+    { key:'_marketValue', label:'Valor Atual',   type:'currency' },
+    { key:'_pnl',         label:'P&L (R$)',      type:'pnl' },
+    { key:'_roi',         label:'ROI (%)',        type:'pct' },
+  ].filter(c => c.key === '_ticker' || c.key === '_sector' ||
+    rows.some(r => !isNaN(r[c.key]) && r[c.key] != null));
+
+  // Header
+  const sortMarker = (key) => {
+    if (sortState.col !== key) return '';
+    return sortState.asc ? ' sorted-asc' : ' sorted-desc';
+  };
+
+  document.getElementById('tableHead').innerHTML = `<tr>
+    ${cols.map(c=>`<th class="${sortMarker(c.key)}" onclick="sortTable('${c.key}')">${c.label}</th>`).join('')}
+  </tr>`;
+
+  if (!sorted.length) {
+    document.getElementById('tableBody').innerHTML = `<tr class="empty-row"><td colspan="${cols.length}">Nenhum ativo encontrado com os filtros aplicados.</td></tr>`;
+    return;
+  }
+
+  document.getElementById('tableBody').innerHTML = sorted.map(r => {
+    const rowCls = r._roi === bestROI ? 'row-best' : r._roi === worstROI ? 'row-worst' : '';
+    const cells = cols.map(c => {
+      const v = r[c.key];
+      if (c.type === 'ticker') return `<td class="td-ticker">${v}</td>`;
+      if (c.type === 'sector') return `<td><span class="sector-badge">${v}</span></td>`;
+      if (c.type === 'num')    return `<td class="td-number td-neutral">${isNaN(v)?'—':v.toLocaleString('pt-BR')}</td>`;
+      if (c.type === 'currency') return `<td class="td-number td-neutral">${fmtCurrency(v)}</td>`;
+      if (c.type === 'pnl') {
+        const cls = isNaN(v) ? 'td-neutral' : v>=0 ? 'td-positive' : 'td-negative';
+        return `<td class="td-number ${cls}">${fmtCurrency(v)}</td>`;
+      }
+      if (c.type === 'pct') {
+        const cls = isNaN(v) ? 'td-neutral' : v>=0 ? 'td-positive' : 'td-negative';
+        return `<td class="td-number ${cls}">${isNaN(v)?'—':fmtPct(v)}</td>`;
+      }
+      return `<td>${v??'—'}</td>`;
+    });
+    return `<tr class="${rowCls}">${cells.join('')}</tr>`;
+  }).join('');
+}
+
+function sortTable(col) {
+  if (sortState.col === col) sortState.asc = !sortState.asc;
+  else { sortState.col = col; sortState.asc = false; }
+  renderTable();
+}
+
+// ─────────────────────────────────────────────
+//  CHART HELPERS
+// ─────────────────────────────────────────────
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function mkGradient(ctx, color, alpha1=0.35, alpha2=0.0) {
+  const g = ctx.createLinearGradient(0,0,0,ctx.canvas.height);
+  const c = color.replace('#','');
+  const r = parseInt(c.slice(0,2),16), gv=parseInt(c.slice(2,4),16), b=parseInt(c.slice(4,6),16);
+  g.addColorStop(0, `rgba(${r},${gv},${b},${alpha1})`);
+  g.addColorStop(1, `rgba(${r},${gv},${b},${alpha2})`);
+  return g;
+}
+
+// ── Chart: Allocation (Doughnut) ───────────────
+function renderChartAllocation() {
+  destroyChart('allocation');
+  const rows = filteredRows.filter(r=>!isNaN(r._marketValue));
+  if (!rows.length) return;
+
+  const sorted = [...rows].sort((a,b)=>b._marketValue-a._marketValue);
+  const TOP = 10;
+  let labels = [], data = [];
+  let others = 0;
+  sorted.forEach((r,i) => {
+    if (i < TOP) { labels.push(r._ticker); data.push(r._marketValue); }
+    else others += r._marketValue;
+  });
+  if (others > 0) { labels.push('Outros'); data.push(others); }
+
+  const canvas = document.getElementById('chartAllocation');
+  charts['allocation'] = new Chart(canvas, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: PALETTE.slice(0,labels.length), borderWidth: 2, borderColor: '#111827', hoverOffset: 6 }] },
+    options: {
+      cutout: '62%',
+      plugins: {
+        legend: { position:'right', labels:{ font:{size:10}, color:'#8899b4', boxWidth:8, padding:10 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const total = ctx.dataset.data.reduce((s,v)=>s+v,0);
+              const pct = ((ctx.raw/total)*100).toFixed(1);
+              return ` ${fmtCurrency(ctx.raw)} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// ── Chart: ROI Bar ─────────────────────────────
+function renderChartROI() {
+  destroyChart('roi');
+  const rows = filteredRows.filter(r=>!isNaN(r._roi)).sort((a,b)=>b._roi-a._roi);
+  if (!rows.length) return;
+
+  charts['roi'] = new Chart(document.getElementById('chartRoi'), {
+    type: 'bar',
+    data: {
+      labels: rows.map(r=>r._ticker),
+      datasets: [{
+        data: rows.map(r=>r._roi),
+        backgroundColor: rows.map(r=>r._roi>=0 ? 'rgba(72,187,120,0.75)' : 'rgba(252,129,129,0.75)'),
+        borderColor:     rows.map(r=>r._roi>=0 ? '#48bb78' : '#fc8181'),
+        borderWidth: 1, borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: rows.length > 8 ? 'y' : 'x',
+      plugins: { legend:{display:false}, tooltip:{ callbacks:{ label: ctx => fmtPct(ctx.raw) } } },
+      scales: {
+        x: { grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#8899b4',maxRotation:45} },
+        y: { grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#8899b4'} }
+      }
+    }
+  });
+}
+
+// ── Chart: P&L Bar ─────────────────────────────
+function renderChartPnL() {
+  destroyChart('pnl');
+  const rows = filteredRows.filter(r=>!isNaN(r._pnl)).sort((a,b)=>b._pnl-a._pnl);
+  if (!rows.length) return;
+
+  charts['pnl'] = new Chart(document.getElementById('chartPnl'), {
+    type: 'bar',
+    data: {
+      labels: rows.map(r=>r._ticker),
+      datasets: [{
+        data: rows.map(r=>r._pnl),
+        backgroundColor: rows.map(r=>r._pnl>=0?'rgba(72,187,120,0.75)':'rgba(252,129,129,0.75)'),
+        borderColor:     rows.map(r=>r._pnl>=0?'#48bb78':'#fc8181'),
+        borderWidth:1, borderRadius:4,
+      }]
+    },
+    options: {
+      indexAxis: rows.length > 8 ? 'y' : 'x',
+      plugins: { legend:{display:false}, tooltip:{ callbacks:{ label: ctx => fmtCurrency(ctx.raw) } } },
+      scales: {
+        x: { grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#8899b4',maxRotation:45} },
+        y: { grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#8899b4', callback: v => fmtCurrency(v) } }
+      }
+    }
+  });
+}
+
+// ── Chart: Sector Donut ────────────────────────
+function renderChartSector() {
+  destroyChart('sector');
+  const rows = filteredRows.filter(r=>!isNaN(r._marketValue));
+  if (!rows.length) return;
+
+  const bySector = {};
+  rows.forEach(r => {
+    bySector[r._sector] = (bySector[r._sector]||0) + r._marketValue;
+  });
+
+  const sorted = Object.entries(bySector).sort((a,b)=>b[1]-a[1]);
+  const labels = sorted.map(e=>e[0]);
+  const data   = sorted.map(e=>e[1]);
+
+  charts['sector'] = new Chart(document.getElementById('chartSector'), {
+    type: 'doughnut',
+    data: { labels, datasets:[{ data, backgroundColor: PALETTE.slice(5,5+labels.length), borderWidth:2, borderColor:'#111827', hoverOffset:6 }] },
+    options: {
+      cutout: '55%',
+      plugins: {
+        legend: { position:'bottom', labels:{font:{size:10},color:'#8899b4',boxWidth:8,padding:8} },
+        tooltip: { callbacks:{ label: ctx => {
+          const t = ctx.dataset.data.reduce((s,v)=>s+v,0);
+          return ` ${fmtCurrency(ctx.raw)} (${((ctx.raw/t)*100).toFixed(1)}%)`;
+        }}}
+      }
+    }
+  });
+}
+
+// ── Chart: Evolution Line ──────────────────────
+function renderChartEvolution() {
+  destroyChart('evolution');
+
+  // Build timeline from dated rows
+  const datedRows = filteredRows.filter(r => r._date instanceof Date && !isNaN(r._date) && !isNaN(r._marketValue));
+
+  if (!datedRows.length) {
+    // Fallback: just show current allocation as single point
+    const totalMkt = filteredRows.reduce((s,r)=>s+(isNaN(r._marketValue)?0:r._marketValue),0);
+    const totalCost= filteredRows.reduce((s,r)=>s+(isNaN(r._cost)?0:r._cost),0);
+    const canvas   = document.getElementById('chartEvolution');
+    const ctx      = canvas.getContext('2d');
+
+    charts['evolution'] = new Chart(canvas, {
+      type:'bar',
+      data:{
+        labels:['Custo Total','Valor Atual'],
+        datasets:[{
+          data:[totalCost, totalMkt],
+          backgroundColor:['rgba(99,179,237,0.5)','rgba(72,187,120,0.5)'],
+          borderColor:['#63b3ed','#48bb78'],
+          borderWidth:1, borderRadius:6,
+        }]
+      },
+      options:{
+        plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>fmtCurrency(ctx.raw)}}},
+        scales:{
+          x:{grid:{display:false},ticks:{color:'#8899b4'}},
+          y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#8899b4',callback:v=>fmtCurrency(v)}}
+        }
+      }
+    });
+    return;
+  }
+
+  // Build cumulative timeline
+  // Group by month: sum market value for rows purchased <= that month
+  const months = buildMonthlyTimeline(datedRows);
+
+  const canvas = document.getElementById('chartEvolution');
+  const ctx    = canvas.getContext('2d');
+  const grad   = mkGradient(ctx, '#63b3ed', 0.4, 0.02);
+
+  charts['evolution'] = new Chart(canvas, {
+    type:'line',
+    data:{
+      labels: months.map(m=>m.label),
+      datasets:[
+        {
+          label:'Patrimônio (R$)',
+          data: months.map(m=>m.value),
+          borderColor:'#63b3ed', borderWidth:2,
+          backgroundColor: grad,
+          fill:true, tension:0.35,
+          pointRadius:3, pointBackgroundColor:'#63b3ed',
+        },
+        {
+          label:'Custo Investido (R$)',
+          data: months.map(m=>m.cost),
+          borderColor:'rgba(246,224,94,0.6)', borderWidth:1.5,
+          borderDash:[4,4],
+          backgroundColor:'transparent',
+          fill:false, tension:0.35,
+          pointRadius:2, pointBackgroundColor:'#f6e05e',
+        }
+      ]
+    },
+    options:{
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:true, labels:{font:{size:10},color:'#8899b4',boxWidth:8}},
+        tooltip:{callbacks:{label:ctx=>` ${fmtCurrency(ctx.raw)}`}}
+      },
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#8899b4',maxTicksLimit:12}},
+        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#8899b4',callback:v=>fmtCurrency(v)}}
+      }
+    }
+  });
+}
+
+function buildMonthlyTimeline(rows) {
+  // Earliest date to today
+  const start  = new Date(Math.min(...rows.map(r=>r._date.getTime())));
+  const end    = new Date();
+  const months = [];
+  const cur    = new Date(start.getFullYear(), start.getMonth(), 1);
+
+  while (cur <= end) {
+    const y = cur.getFullYear(), mo = cur.getMonth();
+    const label = cur.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'});
+    const endOfMonth = new Date(y, mo+1, 0);
+    // Rows purchased on or before end of this month
+    const active = rows.filter(r => r._date <= endOfMonth);
+    const value  = active.reduce((s,r)=>s+(isNaN(r._marketValue)?0:r._marketValue),0);
+    const cost   = active.reduce((s,r)=>s+(isNaN(r._cost)?0:r._cost),0);
+    months.push({label, value, cost});
+    cur.setMonth(cur.getMonth()+1);
+  }
+  return months;
+}
+
+// ─────────────────────────────────────────────
+//  AUTO-REFRESH
+// ─────────────────────────────────────────────
+setInterval(loadData, AUTO_REFRESH_MINUTES * 60 * 1000);
+
+// ─────────────────────────────────────────────
+//  BOOTSTRAP
+// ─────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
