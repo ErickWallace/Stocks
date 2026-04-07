@@ -57,12 +57,12 @@
 
 <div class="cards">
   <div class="card">
-    <h3>💰 Patrimônio Total</h3>
+    <h3>💰 Total Investido</h3>
     <p id="total">-</p>
   </div>
   <div class="card">
-    <h3>📈 Rentabilidade (simulada)</h3>
-    <p id="rentabilidade">-</p>
+    <h3>📊 Nº de Operações</h3>
+    <p id="operacoes">-</p>
   </div>
 </div>
 
@@ -84,7 +84,6 @@ async function fetchData() {
 function parseCSV(data) {
   const linhas = data.trim().split("\n");
 
-  // detecta separador automaticamente
   const separador = linhas[0].includes(";") ? ";" : ",";
 
   const rows = linhas.map(r => r.split(separador));
@@ -97,17 +96,24 @@ function parseCSV(data) {
   });
 }
 
+function parseValor(valor) {
+  return parseFloat(
+    (valor || "0")
+      .replace(/\./g, "")
+      .replace(",", ".")
+  ) || 0;
+}
+
 function calcularIndicadores(data) {
   let total = 0;
 
   data.forEach(d => {
-    const valor = parseFloat((d["Valor Total"] || "0").replace(",", "."));
-    total += isNaN(valor) ? 0 : valor;
+    total += parseValor(d["Valor Total"]);
   });
 
   return {
     total: total.toFixed(2),
-    rentabilidade: (Math.random() * 20 - 10).toFixed(2) + "%"
+    operacoes: data.length
   };
 }
 
@@ -128,14 +134,24 @@ function gerarGraficoLinha(data) {
 
   data.forEach(d => {
     const dataKey = d["Data"];
-    const valor = parseFloat((d["Valor Total"] || "0").replace(",", "."));
+    const valor = parseValor(d["Valor Total"]);
+
+    if (!dataKey) return;
 
     if (!agrupado[dataKey]) agrupado[dataKey] = 0;
-    agrupado[dataKey] += isNaN(valor) ? 0 : valor;
+
+    agrupado[dataKey] += valor;
   });
 
-  const datas = Object.keys(agrupado).sort();
-  const valores = datas.map(d => agrupado[d]);
+  const datas = Object.keys(agrupado)
+    .sort((a, b) => new Date(a) - new Date(b));
+
+  let acumulado = 0;
+
+  const valores = datas.map(d => {
+    acumulado += agrupado[d];
+    return acumulado;
+  });
 
   if (linhaChart) linhaChart.destroy();
 
@@ -144,10 +160,9 @@ function gerarGraficoLinha(data) {
     data: {
       labels: datas,
       datasets: [{
-        label: "Patrimônio ao longo do tempo",
+        label: "Aportes acumulados",
         data: valores,
-        borderWidth: 2,
-        fill: false
+        tension: 0.3
       }]
     }
   });
@@ -158,11 +173,11 @@ function gerarPizza(data) {
 
   data.forEach(d => {
     const ativo = d["Ativo"];
-    const valor = parseFloat((d["Valor Total"] || "0").replace(",", "."));
+    const valor = parseValor(d["Valor Total"]);
 
     if (!ativo) return;
 
-    agrupado[ativo] = (agrupado[ativo] || 0) + (isNaN(valor) ? 0 : valor);
+    agrupado[ativo] = (agrupado[ativo] || 0) + valor;
   });
 
   if (pizzaChart) pizzaChart.destroy();
@@ -196,8 +211,11 @@ async function init() {
 
     const indicadores = calcularIndicadores(filtrado);
 
-    document.getElementById("total").innerText = "R$ " + indicadores.total;
-    document.getElementById("rentabilidade").innerText = indicadores.rentabilidade;
+    document.getElementById("total").innerText =
+      "R$ " + Number(indicadores.total).toLocaleString("pt-BR");
+
+    document.getElementById("operacoes").innerText =
+      indicadores.operacoes;
 
     gerarGraficoLinha(filtrado);
     gerarPizza(filtrado);
