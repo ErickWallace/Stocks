@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio · Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0e13;
+    --surface: #111620;
+    --surface2: #171d2b;
+    --border: #1e2738;
+    --accent: #00e5a0;
+    --accent2: #0099ff;
+    --red: #ff4d6d;
+    --text: #e8edf5;
+    --muted: #5a6480;
+    --muted2: #8893aa;
+    --font-display: 'Syne', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-display);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* BG grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,160,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,160,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 40px 32px;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 48px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .logo-area h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+  .logo-area h1 span { color: var(--accent); }
+
+  .logo-area p {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-top: 6px;
+    letter-spacing: 0.08em;
+  }
+
+  .last-update {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-align: right;
+  }
+  .last-update .dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-right: 6px;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* SUMMARY CARDS */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+
+  .card.red::before { background: linear-gradient(90deg, var(--red), transparent); }
+  .card.blue::before { background: linear-gradient(90deg, var(--accent2), transparent); }
+
+  .card-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .card-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .card-sub {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    margin-top: 8px;
+    color: var(--muted2);
+  }
+  .positive { color: var(--accent); }
+  .negative { color: var(--red); }
+
+  /* LAYOUT 2-COL */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 24px;
+    align-items: start;
+  }
+
+  @media (max-width: 960px) {
+    .main-grid { grid-template-columns: 1fr; }
+  }
+
+  /* TABLE */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .table-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .table-header h2 { font-size: 0.9rem; font-weight: 600; }
+  .count-badge {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 10px;
+    color: var(--muted2);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+
+  thead th {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 12px 16px;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  thead th:first-child { text-align: left; }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+    cursor: default;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+
+  tbody td {
+    padding: 14px 16px;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--muted2);
+    white-space: nowrap;
+  }
+  tbody td:first-child {
+    text-align: left;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+
+  .ticker-tag {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+  }
+
+  .ret-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 500;
+  }
+  .ret-pill.pos { background: rgba(0,229,160,0.12); color: var(--accent); }
+  .ret-pill.neg { background: rgba(255,77,109,0.12); color: var(--red); }
+
+  /* BAR mini for carteira */
+  .bar-cell { min-width: 100px; }
+  .bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .bar-bg {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  /* SIDE PANEL */
+  .side-panel { display: flex; flex-direction: column; gap: 20px; }
+
+  .panel-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .panel-title {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  /* DONUT */
+  .donut-wrap { display: flex; justify-content: center; margin-bottom: 16px; }
+  svg.donut { transform: rotate(-90deg); }
+
+  .legend { display: flex; flex-direction: column; gap: 8px; }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.78rem;
+  }
+  .legend-left { display: flex; align-items: center; gap: 8px; }
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .legend-name { color: var(--text); font-weight: 600; }
+  .legend-pct {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--muted2);
+  }
+
+  /* TOP performers */
+  .perf-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .perf-item:last-child { border-bottom: none; }
+  .perf-name { font-weight: 600; font-size: 0.82rem; }
+  .perf-val { font-family: var(--font-mono); font-size: 0.75rem; }
+
+  /* LOADING */
+  .loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    gap: 16px;
+  }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading p { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+
+  /* ERROR */
+  .error-box {
+    background: rgba(255,77,109,0.08);
+    border: 1px solid rgba(255,77,109,0.3);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    color: var(--red);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+  }
+
+  .refresh-btn {
+    margin-top: 12px;
+    background: none;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 7px 18px;
+    border-radius: 6px;
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .refresh-btn:hover { background: rgba(0,229,160,0.1); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo-area">
+      <h1>PORTFÓLIO <span>·</span> INVEST</h1>
+      <p>DASHBOARD · ATUALIZAÇÃO AUTOMÁTICA VIA GOOGLE SHEETS</p>
+    </div>
+    <div class="last-update">
+      <span class="dot"></span>
+      <span id="update-time">Carregando...</span>
+    </div>
+  </header>
+
+  <div id="app">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Buscando dados da planilha...</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQe-6MygeRUixx0XOdtZrSvlgvBrx82peKMF8tp9IkC_bZkSR_vANXNW3GjuZNkeApQS16AAWQORbHs/pub?output=csv';
+
+const PALETTE = [
+  '#00e5a0','#0099ff','#a78bfa','#fbbf24','#f472b6',
+  '#34d399','#60a5fa','#fb923c','#e879f9','#22d3ee',
+  '#4ade80','#f87171','#818cf8','#facc15','#38bdf8'
+];
+
+function parseNum(str) {
+  if (!str || str.trim() === '' || str.trim() === '-') return null;
+  // remove R$, spaces, % and parse
+  let s = str.replace(/R\$\s?/g, '').replace(/\./g, '').replace(',', '.').replace('%','').trim();
+  return parseFloat(s);
+}
+
+function fmtBRL(n) {
+  if (n === null || isNaN(n)) return '—';
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function fmtPct(n) {
+  if (n === null || isNaN(n)) return '—';
+  return (n > 0 ? '+' : '') + n.toFixed(2) + '%';
+}
+
+function fmtNum(n, dec = 2) {
+  if (n === null || isNaN(n)) return '—';
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+async function fetchData() {
+  const res = await fetch(CSV_URL + '&t=' + Date.now());
+  const text = await res.text();
+  return parseCSV(text);
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = smartSplit(lines[i]);
+    if (vals.length < 2) continue;
+    const obj = {};
+    headers.forEach((h, idx) => obj[h] = (vals[idx] || '').trim().replace(/^"|"$/g,''));
+    if (obj[headers[0]] && obj[headers[0]].trim()) rows.push(obj);
+  }
+  return { headers, rows };
+}
+
+function smartSplit(line) {
+  const result = [];
+  let cur = '';
+  let inQ = false;
+  for (let c of line) {
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur); cur = ''; }
+    else { cur += c; }
+  }
+  result.push(cur);
+  return result;
+}
+
+function buildDonut(data, r = 80, stroke = 22) {
+  const cx = r + stroke;
+  const cy = r + stroke;
+  const size = (r + stroke) * 2;
+  const circ = 2 * Math.PI * r;
+  let offset = 0;
+  let paths = '';
+  data.forEach((item, i) => {
+    const pct = item.pct / 100;
+    const dash = pct * circ;
+    const gap = circ - dash;
+    paths += `<circle
+      cx="${cx}" cy="${cy}" r="${r}"
+      fill="none"
+      stroke="${PALETTE[i % PALETTE.length]}"
+      stroke-width="${stroke}"
+      stroke-dasharray="${dash} ${gap}"
+      stroke-dashoffset="${-offset}"
+      stroke-linecap="butt"
+    />`;
+    offset += dash;
+  });
+  return `<svg class="donut" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#1e2738" stroke-width="${stroke}"/>
+    ${paths}
+  </svg>`;
+}
+
+function render({ headers, rows }) {
+  // detect columns (case-insensitive, partial match)
+  function col(keywords) {
+    return headers.find(h => keywords.some(k => h.toLowerCase().includes(k.toLowerCase()))) || '';
+  }
+  const C = {
+    stock:    col(['stock','ativo','ticker','ação','acoes','nome']),
+    qty:      col(['quantidade','qtd','cotas','qty']),
+    paid:     col(['pago','custo','invest']),
+    current:  col(['atual','value','valor total atual']),
+    avgPrice: col(['médio','medio','avg','preço médio']),
+    price:    col(['preço','preco','price','cotação']),
+    retorno:  col(['retorno','return','ganho','lucro']),
+    carteira: col(['carteira','%','peso','alloc']),
+  };
+
+  const stocks = rows.map(r => ({
+    name:     r[C.stock] || '?',
+    qty:      parseNum(r[C.qty]),
+    paid:     parseNum(r[C.paid]),
+    current:  parseNum(r[C.current]),
+    avgPrice: parseNum(r[C.avgPrice]),
+    price:    parseNum(r[C.price]),
+    retorno:  parseNum(r[C.retorno]),
+    carteira: parseNum(r[C.carteira]),
+  })).filter(s => s.name && s.name !== '?');
+
+  // Summaries
+  const totalPaid    = stocks.reduce((s, x) => s + (x.paid || 0), 0);
+  const totalCurrent = stocks.reduce((s, x) => s + (x.current || 0), 0);
+  const totalReturn  = totalCurrent - totalPaid;
+  const totalRetPct  = totalPaid ? (totalReturn / totalPaid) * 100 : 0;
+
+  // Sort by carteira desc for donut
+  const byCarteira = [...stocks].sort((a,b) => (b.carteira||0)-(a.carteira||0));
+  const topPerf = [...stocks].filter(s => s.retorno !== null).sort((a,b) => (b.retorno||0)-(a.retorno||0)).slice(0,5);
+
+  const donutData = byCarteira.filter(s => s.carteira).map(s => ({ name: s.name, pct: s.carteira }));
+
+  const retClass = totalReturn >= 0 ? 'positive' : 'negative';
+  const retSign  = totalReturn >= 0 ? '+' : '';
+
+  document.getElementById('update-time').textContent = 'Atualizado em ' + new Date().toLocaleString('pt-BR');
+
+  document.getElementById('app').innerHTML = `
+    <div class="summary-grid">
+      <div class="card">
+        <div class="card-label">Total Investido</div>
+        <div class="card-value">${fmtBRL(totalPaid)}</div>
+        <div class="card-sub">${stocks.length} ativos na carteira</div>
+      </div>
+      <div class="card blue">
+        <div class="card-label">Valor Atual</div>
+        <div class="card-value">${fmtBRL(totalCurrent)}</div>
+        <div class="card-sub">Posição atual marcada a mercado</div>
+      </div>
+      <div class="card ${totalReturn >= 0 ? '' : 'red'}">
+        <div class="card-label">Resultado Total</div>
+        <div class="card-value ${retClass}">${retSign}${fmtBRL(totalReturn)}</div>
+        <div class="card-sub ${retClass}">${retSign}${fmtPct(totalRetPct)} no período</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Ativos Positivos</div>
+        <div class="card-value positive">${stocks.filter(s => s.retorno > 0).length}</div>
+        <div class="card-sub">${stocks.filter(s => s.retorno < 0).length} ativos negativos</div>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <div>
+        <div class="table-wrap">
+          <div class="table-header">
+            <h2>Posições</h2>
+            <span class="count-badge">${stocks.length} ativos</span>
+          </div>
+          <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Ativo</th>
+                <th>Qtd</th>
+                <th>P. Médio</th>
+                <th>Preço Atual</th>
+                <th>Total Pago</th>
+                <th>Valor Atual</th>
+                <th>Retorno</th>
+                <th>Carteira</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${stocks.map((s, i) => {
+                const ret = s.retorno;
+                const retOk = ret !== null;
+                const retPos = ret >= 0;
+                const color = PALETTE[byCarteira.findIndex(x => x.name === s.name) % PALETTE.length];
+                return `<tr>
+                  <td><span class="ticker-tag" style="border-color:${color}22;color:${color}">${s.name}</span></td>
+                  <td>${s.qty !== null ? fmtNum(s.qty, 0) : '—'}</td>
+                  <td>${s.avgPrice !== null ? fmtBRL(s.avgPrice) : '—'}</td>
+                  <td>${s.price !== null ? fmtBRL(s.price) : '—'}</td>
+                  <td>${s.paid !== null ? fmtBRL(s.paid) : '—'}</td>
+                  <td>${s.current !== null ? fmtBRL(s.current) : '—'}</td>
+                  <td>${retOk ? `<span class="ret-pill ${retPos?'pos':'neg'}">${fmtPct(ret)}</span>` : '—'}</td>
+                  <td class="bar-cell">
+                    <div class="bar-wrap">
+                      <div class="bar-bg"><div class="bar-fill" style="width:${Math.min(s.carteira||0,100)}%;background:${color}"></div></div>
+                      <span style="font-family:var(--font-mono);font-size:0.68rem;color:var(--muted2);min-width:36px">${s.carteira !== null ? s.carteira.toFixed(1)+'%' : '—'}</span>
+                    </div>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="side-panel">
+        <div class="panel-card">
+          <div class="panel-title">Alocação da Carteira</div>
+          ${donutData.length ? `
+          <div class="donut-wrap">${buildDonut(donutData)}</div>
+          <div class="legend">
+            ${byCarteira.filter(s => s.carteira).slice(0,10).map((s, i) => `
+              <div class="legend-item">
+                <div class="legend-left">
+                  <div class="legend-dot" style="background:${PALETTE[i%PALETTE.length]}"></div>
+                  <span class="legend-name">${s.name}</span>
+                </div>
+                <span class="legend-pct">${s.carteira !== null ? s.carteira.toFixed(1)+'%' : ''}</span>
+              </div>
+            `).join('')}
+          </div>` : '<p style="color:var(--muted);font-size:0.78rem">Sem dados de alocação</p>'}
+        </div>
+
+        <div class="panel-card">
+          <div class="panel-title">Top Performers</div>
+          ${topPerf.map((s, i) => `
+            <div class="perf-item">
+              <div class="perf-name">${s.name}</div>
+              <div class="perf-val ${s.retorno >= 0 ? 'positive' : 'negative'}">${fmtPct(s.retorno)}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div style="text-align:center">
+          <button class="refresh-btn" onclick="init()">↻ Atualizar Dados</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function init() {
+  document.getElementById('app').innerHTML = `
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Buscando dados da planilha...</p>
+    </div>`;
+  try {
+    const data = await fetchData();
+    if (!data.rows.length) throw new Error('Planilha vazia ou sem dados reconhecíveis.');
+    render(data);
+  } catch(e) {
+    document.getElementById('app').innerHTML = `
+      <div class="error-box">
+        <p>⚠ Não foi possível carregar os dados</p>
+        <p style="margin-top:6px;opacity:.6">${e.message}</p>
+        <button class="refresh-btn" onclick="init()">Tentar novamente</button>
+      </div>`;
+    document.getElementById('update-time').textContent = 'Falha ao carregar';
+  }
+}
+
+// Auto-refresh every 5 minutes
+init();
+setInterval(init, 5 * 60 * 1000);
+</script>
+</body>
+</html>
