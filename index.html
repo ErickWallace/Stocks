@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #080b10;
+    --surface: #0f1420;
+    --surface2: #161d2e;
+    --border: #1e2840;
+    --accent: #00e5b0;
+    --blue: #3d8bff;
+    --warn: #ffb300;
+    --danger: #ff4455;
+    --text: #e4ecf7;
+    --muted: #4e6080;
+    --green: #00e5b0;
+    --red: #ff4455;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+  }
+
+  /* subtle grid bg */
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(rgba(30,40,64,0.4) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(30,40,64,0.4) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events:none;
+    z-index:0;
+  }
+
+  .wrap { max-width:1360px; margin:0 auto; padding:0 28px 64px; position:relative; z-index:1; }
+
+  /* ── HEADER ── */
+  header {
+    display:flex; justify-content:space-between; align-items:flex-end;
+    padding: 36px 0 28px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 36px;
+  }
+  .logo { font-family:'Syne',sans-serif; font-weight:800; font-size:26px; letter-spacing:-0.5px; }
+  .logo span { color: var(--accent); }
+  .logo small { display:block; font-family:'DM Mono',monospace; font-size:11px; font-weight:400; color:var(--muted); margin-top:4px; letter-spacing:1px; }
+  .header-right { text-align:right; font-size:11px; color:var(--muted); line-height:2; }
+  .header-right b { color:var(--accent); }
+  #last-update { color: var(--muted); font-size:10px; }
+
+  /* ── LOADER ── */
+  #loader {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    height: 60vh; gap:20px;
+  }
+  .spinner {
+    width:40px; height:40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius:50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loader p { color: var(--muted); font-size:12px; }
+
+  #error-msg {
+    display:none;
+    background: rgba(255,68,85,0.1);
+    border: 1px solid var(--danger);
+    border-radius:10px;
+    padding:24px;
+    margin:40px 0;
+    color: var(--danger);
+    font-size:13px;
+    line-height:1.8;
+  }
+
+  /* ── MAIN CONTENT ── */
+  #dashboard { display:none; }
+
+  /* ── KPI GRID ── */
+  .kpi-grid {
+    display:grid;
+    grid-template-columns: repeat(5,1fr);
+    gap:16px;
+    margin-bottom:36px;
+  }
+  .kpi {
+    background: var(--surface);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:20px 20px 18px;
+    position:relative; overflow:hidden;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+  .kpi:hover { border-color: var(--accent); transform:translateY(-2px); }
+  .kpi::before {
+    content:'';
+    position:absolute; top:0; left:0; right:0; height:2px;
+    background: var(--kpi-color, var(--accent));
+  }
+  .kpi-label { font-size:9px; text-transform:uppercase; letter-spacing:1.8px; color:var(--muted); margin-bottom:10px; }
+  .kpi-value { font-family:'Syne',sans-serif; font-weight:700; font-size:24px; line-height:1; }
+  .kpi-sub { font-size:10px; color:var(--muted); margin-top:7px; }
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+  .neu { color: var(--warn); }
+
+  /* ── SECTION TITLE ── */
+  .sec {
+    font-family:'Syne',sans-serif; font-size:11px; font-weight:700;
+    text-transform:uppercase; letter-spacing:2.5px; color:var(--muted);
+    display:flex; align-items:center; gap:12px; margin-bottom:18px;
+  }
+  .sec::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  /* ── CHARTS ── */
+  .charts-row {
+    display:grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap:18px;
+    margin-bottom:36px;
+  }
+  .chart-card {
+    background: var(--surface);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:22px;
+  }
+  .chart-title { font-size:10px; text-transform:uppercase; letter-spacing:1.2px; color:var(--muted); margin-bottom:16px; }
+  .chart-wrap { position:relative; height:200px; }
+
+  .charts-row2 {
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap:18px;
+    margin-bottom:36px;
+  }
+  .chart-wrap-tall { position:relative; height:240px; }
+
+  /* ── TABLE ── */
+  .table-card {
+    background: var(--surface);
+    border:1px solid var(--border);
+    border-radius:12px;
+    overflow:hidden;
+    margin-bottom:36px;
+  }
+  .table-top {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:18px 22px; border-bottom:1px solid var(--border);
+  }
+  .table-top h3 { font-family:'Syne',sans-serif; font-size:14px; font-weight:700; }
+  .filters { display:flex; gap:8px; }
+  .fb {
+    padding:5px 14px; border-radius:20px;
+    border:1px solid var(--border);
+    background:transparent; color:var(--muted);
+    font-family:'DM Mono',monospace; font-size:10px;
+    cursor:pointer; transition:all 0.15s;
+  }
+  .fb.active, .fb:hover { border-color:var(--accent); color:var(--accent); background:rgba(0,229,176,0.07); }
+
+  .tbl-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; }
+  thead { background: var(--surface2); }
+  th {
+    padding:11px 16px; text-align:left;
+    font-size:9px; text-transform:uppercase; letter-spacing:1.5px;
+    color:var(--muted); font-weight:500;
+    cursor:pointer; white-space:nowrap;
+    user-select:none;
+  }
+  th:hover { color:var(--text); }
+  th.sorted { color:var(--accent); }
+  th .sort-arrow { opacity:0.4; margin-left:4px; }
+  th.sorted .sort-arrow { opacity:1; }
+
+  td {
+    padding:13px 16px; font-size:12px;
+    border-bottom:1px solid rgba(30,40,64,0.6);
+    white-space:nowrap;
+  }
+  tbody tr { transition: background 0.12s; }
+  tbody tr:hover { background: rgba(255,255,255,0.03); }
+  tbody tr:last-child td { border-bottom:none; }
+
+  .ticker {
+    font-family:'Syne',sans-serif; font-weight:700; font-size:14px;
+    color:var(--text);
+  }
+  .badge {
+    display:inline-block; padding:3px 9px; border-radius:20px;
+    font-size:10px; font-weight:500; letter-spacing:0.5px;
+  }
+  .badge-buy  { background:rgba(0,229,176,0.12); color:var(--green); border:1px solid rgba(0,229,176,0.25); }
+  .badge-hold { background:rgba(255,179,0,0.12);  color:var(--warn);  border:1px solid rgba(255,179,0,0.25); }
+  .badge-sell { background:rgba(255,68,85,0.12);  color:var(--red);   border:1px solid rgba(255,68,85,0.25); }
+
+  /* sparkline mini bar */
+  .perf-bar {
+    display:inline-block; height:4px; border-radius:2px;
+    vertical-align:middle; margin-left:8px;
+  }
+
+  /* weight bar */
+  .weight-bar-bg {
+    background: var(--border); border-radius:2px; height:4px; width:80px; display:inline-block; vertical-align:middle;
+  }
+  .weight-bar-fill { height:4px; border-radius:2px; background: var(--accent); }
+
+  /* ── GAINERS / LOSERS ── */
+  .gl-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:36px;
+  }
+  .gl-card {
+    background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:22px;
+  }
+  .gl-card h4 { font-family:'Syne',sans-serif; font-size:12px; font-weight:700; margin-bottom:16px; }
+  .gl-row {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 0; border-bottom:1px solid var(--border);
+  }
+  .gl-row:last-child { border-bottom:none; }
+  .gl-name { font-size:13px; font-weight:500; }
+  .gl-val { font-size:13px; font-weight:600; }
+
+  /* ── FOOTER ── */
+  footer {
+    text-align:center; font-size:10px; color:var(--muted); padding-top:24px;
+    border-top:1px solid var(--border);
+    line-height:2;
+  }
+
+  @media (max-width:900px) {
+    .kpi-grid { grid-template-columns: repeat(3,1fr); }
+    .charts-row { grid-template-columns:1fr; }
+    .charts-row2 { grid-template-columns:1fr; }
+    .gl-grid { grid-template-columns:1fr; }
+  }
+  @media (max-width:600px) {
+    .kpi-grid { grid-template-columns: 1fr 1fr; }
+    .logo { font-size:20px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">
+      Stock<span>Monitor</span>
+      <small>// CARTEIRA DE AÇÕES EUA</small>
+    </div>
+    <div class="header-right">
+      <div>Dados: <b id="sheet-name">Google Sheets</b></div>
+      <div id="last-update">Carregando...</div>
+      <div style="margin-top:6px">
+        <button onclick="loadData()" style="
+          background:rgba(0,229,176,0.1); border:1px solid var(--accent);
+          color:var(--accent); padding:5px 14px; border-radius:20px;
+          font-family:'DM Mono',monospace; font-size:10px; cursor:pointer;
+          transition:all 0.15s;
+        " onmouseover="this.style.background='rgba(0,229,176,0.2)'" onmouseout="this.style.background='rgba(0,229,176,0.1)'">
+          ↻ Atualizar
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div id="loader">
+    <div class="spinner"></div>
+    <p>Buscando dados da planilha...</p>
+  </div>
+
+  <div id="error-msg"></div>
+
+  <div id="dashboard">
+
+    <!-- KPIs -->
+    <div class="kpi-grid">
+      <div class="kpi" style="--kpi-color:var(--blue)">
+        <div class="kpi-label">Total Investido</div>
+        <div class="kpi-value" id="k-invested">—</div>
+        <div class="kpi-sub">custo total da carteira</div>
+      </div>
+      <div class="kpi" style="--kpi-color:var(--accent)">
+        <div class="kpi-label">Valor Atual</div>
+        <div class="kpi-value" id="k-current">—</div>
+        <div class="kpi-sub" id="k-gain-abs">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Retorno Total</div>
+        <div class="kpi-value" id="k-return">—</div>
+        <div class="kpi-sub" id="k-return-sub">desde o início</div>
+      </div>
+      <div class="kpi" style="--kpi-color:var(--green)">
+        <div class="kpi-label">Melhor Posição</div>
+        <div class="kpi-value pos" id="k-best">—</div>
+        <div class="kpi-sub" id="k-best-name">—</div>
+      </div>
+      <div class="kpi" style="--kpi-color:var(--red)">
+        <div class="kpi-label">Pior Posição</div>
+        <div class="kpi-value neg" id="k-worst">—</div>
+        <div class="kpi-sub" id="k-worst-name">—</div>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW 1 -->
+    <div class="sec">Visão da Carteira</div>
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="chart-title">Retorno por Ação (%)</div>
+        <div class="chart-wrap"><canvas id="chart-return"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Composição — Valor Atual</div>
+        <div class="chart-wrap"><canvas id="chart-pie"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Peso na Carteira (%)</div>
+        <div class="chart-wrap"><canvas id="chart-weight"></canvas></div>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW 2 -->
+    <div class="charts-row2">
+      <div class="chart-card">
+        <div class="chart-title">Custo vs. Valor Atual (USD)</div>
+        <div class="chart-wrap-tall"><canvas id="chart-compare"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Preço Médio vs. Preço Atual (USD)</div>
+        <div class="chart-wrap-tall"><canvas id="chart-price"></canvas></div>
+      </div>
+    </div>
+
+    <!-- GAINERS / LOSERS -->
+    <div class="sec">Destaques</div>
+    <div class="gl-grid">
+      <div class="gl-card">
+        <h4>🚀 Maiores Ganhos</h4>
+        <div id="gainers"></div>
+      </div>
+      <div class="gl-card">
+        <h4>📉 Maiores Perdas / Menores Ganhos</h4>
+        <div id="losers"></div>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="sec">Todas as Posições</div>
+    <div class="table-card">
+      <div class="table-top">
+        <h3>Posições detalhadas</h3>
+        <div class="filters">
+          <button class="fb active" onclick="filterTable('all',this)">Todas</button>
+          <button class="fb" onclick="filterTable('buy',this)">✅ Comprar</button>
+          <button class="fb" onclick="filterTable('hold',this)">⏸ Manter</button>
+          <button class="fb" onclick="filterTable('sell',this)">⚠️ Avaliar</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="sortTable('ticker')">Ticker <span class="sort-arrow">↕</span></th>
+              <th onclick="sortTable('qty')">Qtd <span class="sort-arrow">↕</span></th>
+              <th onclick="sortTable('paid')">Vl. Pago <span class="sort-arrow">↕</span></th>
+              <th onclick="sortTable('current')">Vl. Atual <span class="sort-arrow">↕</span></th>
+              <th onclick="sortTable('avgPrice')">Preço Médio <span class="sort-arrow">↕</span></th>
+              <th onclick="sortTable('price')">Preço Atual <span class="sort-arrow">↕</span></th>
+              <th onclick="sortTable('return')">Retorno % <span class="sort-arrow">↕</span></th>
+              <th onclick="sortTable('weight')">% Carteira <span class="sort-arrow">↕</span></th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /dashboard -->
+
+  <footer>
+    Stock Monitor • Dados atualizados automaticamente via Google Sheets CSV<br>
+    Os valores refletem o conteúdo da sua planilha no momento do carregamento
+  </footer>
+</div>
+
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+// ID da planilha + gid da aba "Stocks" (gid=0 = primeira aba)
+const SHEET_ID  = '1zTI-Yif0S3FWvkjwEAg86Yy3scN4wOLCtSDrXgASC24';
+const SHEET_GID = '0'; // ajuste se a aba Stocks não for a primeira
+
+const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let stocks = [];
+let sortKey = 'return';
+let sortAsc = false;
+let filterMode = 'all';
+let charts = {};
+
+// ─── PALETTE ─────────────────────────────────────────────────────────────────
+const PALETTE = [
+  '#00e5b0','#3d8bff','#ffb300','#ff4455','#c084fc',
+  '#34d399','#f97316','#06b6d4','#a3e635','#fb7185',
+  '#818cf8','#fbbf24','#4ade80','#38bdf8','#f472b6',
+  '#e879f9'
+];
+
+// ─── LOAD ─────────────────────────────────────────────────────────────────────
+async function loadData() {
+  document.getElementById('loader').style.display  = 'flex';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('error-msg').style.display  = 'none';
+
+  try {
+    // Use a CORS proxy to fetch the CSV
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(CSV_URL)}`;
+    const res = await fetch(proxyUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const csv  = json.contents;
+
+    stocks = parseCSV(csv);
+    if (stocks.length === 0) throw new Error('Nenhum dado encontrado. Verifique se a planilha está pública e a aba correta.');
+
+    document.getElementById('last-update').textContent =
+      'Atualizado: ' + new Date().toLocaleString('pt-BR');
+
+    render();
+
+    document.getElementById('loader').style.display    = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+
+  } catch(e) {
+    document.getElementById('loader').style.display = 'none';
+    const errEl = document.getElementById('error-msg');
+    errEl.style.display = 'block';
+    errEl.innerHTML = `
+      <b>Erro ao carregar os dados</b><br><br>
+      ${e.message}<br><br>
+      Verifique se:<br>
+      • A planilha está configurada como <b>pública</b> (Compartilhar → qualquer pessoa com o link)<br>
+      • O GID da aba está correto (atual: <code>${SHEET_GID}</code>)<br><br>
+      <small>Dica: abra o console do navegador (F12) para ver o erro completo.</small>
+    `;
+    console.error('Stock Monitor error:', e);
+  }
+}
+
+// ─── PARSE CSV ───────────────────────────────────────────────────────────────
+function parseCSV(csv) {
+  const lines = csv.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Find the header row (has "Stocks" or "ticker" in first col)
+  let headerIdx = 0;
+  for (let i = 0; i < Math.min(5, lines.length); i++) {
+    const first = lines[i].split(',')[0].replace(/"/g,'').trim().toLowerCase();
+    if (first === 'stocks' || first === 'ticker' || first === 'stock') {
+      headerIdx = i; break;
+    }
+  }
+
+  const data = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const cols = splitCSVLine(lines[i]);
+    if (!cols[0] || cols[0].replace(/"/g,'').trim() === '') continue;
+
+    const ticker  = cols[0].replace(/"/g,'').trim().toUpperCase();
+    if (!ticker || ticker.length < 2) continue;
+
+    const qty      = parseNum(cols[1]);
+    const paid     = parseNum(cols[2]);
+    const current  = parseNum(cols[3]);
+    const avgPrice = parseNum(cols[4]);
+    const price    = parseNum(cols[5]);
+
+    if (isNaN(paid) || isNaN(current)) continue;
+
+    const ret    = paid !== 0 ? ((current - paid) / paid) * 100 : 0;
+    const gainAbs = current - paid;
+
+    data.push({ ticker, qty, paid, current, avgPrice, price, ret, gainAbs });
+  }
+  return data;
+}
+
+function splitCSVLine(line) {
+  const result = []; let cur = ''; let inQ = false;
+  for (let c of line) {
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur); cur = ''; }
+    else cur += c;
+  }
+  result.push(cur);
+  return result;
+}
+
+function parseNum(s) {
+  if (!s) return NaN;
+  return parseFloat(s.replace(/"/g,'').replace(/[$R\s%]/g,'').replace(/,/g,'.')) || 0;
+}
+
+// ─── RENDER ALL ───────────────────────────────────────────────────────────────
+function render() {
+  const totalPaid    = stocks.reduce((s,x) => s + x.paid, 0);
+  const totalCurrent = stocks.reduce((s,x) => s + x.current, 0);
+  const totalReturn  = ((totalCurrent - totalPaid) / totalPaid) * 100;
+  const totalGain    = totalCurrent - totalPaid;
+
+  // Add weight
+  stocks.forEach(s => { s.weight = (s.current / totalCurrent) * 100; });
+
+  const sorted = [...stocks].sort((a,b) => b.ret - a.ret);
+  const best  = sorted[0];
+  const worst = sorted[sorted.length - 1];
+
+  // KPIs
+  document.getElementById('k-invested').textContent = fmt$(totalPaid);
+  document.getElementById('k-current').textContent  = fmt$(totalCurrent);
+  document.getElementById('k-gain-abs').innerHTML =
+    `<span class="${totalGain>=0?'pos':'neg'}">${totalGain>=0?'+':''}${fmt$(totalGain)}</span> de ganho`;
+  document.getElementById('k-return').innerHTML =
+    `<span class="${totalReturn>=0?'pos':'neg'}">${totalReturn>=0?'+':''}${totalReturn.toFixed(2)}%</span>`;
+
+  document.getElementById('k-best').textContent  = `+${best.ret.toFixed(1)}%`;
+  document.getElementById('k-best-name').textContent = best.ticker;
+  document.getElementById('k-worst').textContent = `${worst.ret.toFixed(1)}%`;
+  document.getElementById('k-worst-name').textContent = worst.ticker;
+
+  renderCharts();
+  renderGainersLosers();
+  renderTable();
+}
+
+// ─── CHARTS ───────────────────────────────────────────────────────────────────
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function renderCharts() {
+  const tickers = stocks.map(s => s.ticker);
+  const colors  = stocks.map((_,i) => PALETTE[i % PALETTE.length]);
+  const sorted  = [...stocks].sort((a,b) => b.ret - a.ret);
+
+  // 1. Bar: Return %
+  destroyChart('return');
+  charts['return'] = new Chart(document.getElementById('chart-return'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(s => s.ticker),
+      datasets: [{
+        data: sorted.map(s => parseFloat(s.ret.toFixed(2))),
+        backgroundColor: sorted.map(s => s.ret >= 0 ? 'rgba(0,229,176,0.75)' : 'rgba(255,68,85,0.75)'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{
+        label: ctx => ` ${ctx.raw > 0 ? '+' : ''}${ctx.raw}%`
+      }}},
+      scales:{
+        x:{ ticks:{ color:'#4e6080', font:{size:9} }, grid:{display:false} },
+        y:{ ticks:{ color:'#4e6080', font:{size:9}, callback: v => v+'%' }, grid:{ color:'rgba(30,40,64,0.8)' } }
+      }
+    }
+  });
+
+  // 2. Doughnut: Composition
+  destroyChart('pie');
+  charts['pie'] = new Chart(document.getElementById('chart-pie'), {
+    type: 'doughnut',
+    data: {
+      labels: tickers,
+      datasets: [{ data: stocks.map(s => s.current.toFixed(2)), backgroundColor: colors, borderWidth:0, hoverOffset:8 }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'right', labels:{ color:'#4e6080', font:{size:9}, boxWidth:10, padding:8 } },
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: ${fmt$(ctx.raw)}` }}
+      },
+      cutout:'65%'
+    }
+  });
+
+  // 3. Horizontal bar: Weight %
+  destroyChart('weight');
+  const wSorted = [...stocks].sort((a,b) => b.weight - a.weight);
+  charts['weight'] = new Chart(document.getElementById('chart-weight'), {
+    type: 'bar',
+    data: {
+      labels: wSorted.map(s => s.ticker),
+      datasets: [{
+        data: wSorted.map(s => parseFloat(s.weight.toFixed(2))),
+        backgroundColor: wSorted.map((_,i) => PALETTE[i % PALETTE.length]),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis:'y',
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{
+        label: ctx => ` ${ctx.raw}%`
+      }}},
+      scales:{
+        x:{ ticks:{ color:'#4e6080', font:{size:9}, callback: v => v+'%' }, grid:{ color:'rgba(30,40,64,0.8)' } },
+        y:{ ticks:{ color:'#4e6080', font:{size:9} }, grid:{display:false} }
+      }
+    }
+  });
+
+  // 4. Grouped bar: Cost vs Current
+  destroyChart('compare');
+  charts['compare'] = new Chart(document.getElementById('chart-compare'), {
+    type:'bar',
+    data:{
+      labels: tickers,
+      datasets:[
+        { label:'Vl. Pago', data: stocks.map(s=>s.paid.toFixed(2)), backgroundColor:'rgba(61,139,255,0.6)', borderRadius:4 },
+        { label:'Vl. Atual', data: stocks.map(s=>s.current.toFixed(2)), backgroundColor:'rgba(0,229,176,0.7)', borderRadius:4 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ labels:{ color:'#6b7a93', font:{size:10}, boxWidth:10 } },
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.dataset.label}: ${fmt$(ctx.raw)}` }}
+      },
+      scales:{
+        x:{ ticks:{color:'#4e6080',font:{size:9}}, grid:{display:false} },
+        y:{ ticks:{color:'#4e6080',font:{size:9},callback:v=>fmt$(v)}, grid:{color:'rgba(30,40,64,0.8)'} }
+      }
+    }
+  });
+
+  // 5. Line/Scatter: Avg Price vs Current Price
+  destroyChart('price');
+  charts['price'] = new Chart(document.getElementById('chart-price'), {
+    type:'bar',
+    data:{
+      labels: tickers,
+      datasets:[
+        { label:'Preço Médio', data: stocks.map(s=>s.avgPrice), backgroundColor:'rgba(61,139,255,0.55)', borderRadius:4 },
+        { label:'Preço Atual', data: stocks.map(s=>s.price), backgroundColor: stocks.map(s => s.price >= s.avgPrice ? 'rgba(0,229,176,0.75)' : 'rgba(255,68,85,0.75)'), borderRadius:4 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ labels:{ color:'#6b7a93', font:{size:10}, boxWidth:10 } },
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.dataset.label}: $${Number(ctx.raw).toFixed(2)}` }}
+      },
+      scales:{
+        x:{ ticks:{color:'#4e6080',font:{size:9}}, grid:{display:false} },
+        y:{ ticks:{color:'#4e6080',font:{size:9},callback:v=>'$'+v}, grid:{color:'rgba(30,40,64,0.8)'} }
+      }
+    }
+  });
+}
+
+// ─── GAINERS / LOSERS ────────────────────────────────────────────────────────
+function renderGainersLosers() {
+  const sorted = [...stocks].sort((a,b) => b.ret - a.ret);
+  const top3   = sorted.slice(0, 5);
+  const bot3   = sorted.slice(-5).reverse();
+
+  document.getElementById('gainers').innerHTML = top3.map((s,i) => `
+    <div class="gl-row">
+      <div>
+        <span style="color:var(--muted);font-size:10px;margin-right:8px">${i+1}</span>
+        <span class="gl-name">${s.ticker}</span>
+        <span style="font-size:10px;color:var(--muted);margin-left:8px">${fmt$(s.gainAbs)}</span>
+      </div>
+      <span class="gl-val pos">+${s.ret.toFixed(2)}%</span>
+    </div>`).join('');
+
+  document.getElementById('losers').innerHTML = bot3.map((s,i) => `
+    <div class="gl-row">
+      <div>
+        <span style="color:var(--muted);font-size:10px;margin-right:8px">${i+1}</span>
+        <span class="gl-name">${s.ticker}</span>
+        <span style="font-size:10px;color:var(--muted);margin-left:8px">${fmt$(s.gainAbs)}</span>
+      </div>
+      <span class="gl-val ${s.ret>=0?'pos':'neg'}">${s.ret>=0?'+':''}${s.ret.toFixed(2)}%</span>
+    </div>`).join('');
+}
+
+// ─── TABLE ───────────────────────────────────────────────────────────────────
+function getSignal(s) {
+  if (s.ret < -5) return { label:'⚠️ Avaliar', cls:'badge-sell', mode:'sell' };
+  if (s.ret > 20) return { label:'⭐ Top', cls:'badge-buy', mode:'buy' };
+  return { label:'⏸ Manter', cls:'badge-hold', mode:'hold' };
+}
+
+function renderTable() {
+  let data = [...stocks];
+
+  if (filterMode !== 'all') {
+    data = data.filter(s => getSignal(s).mode === filterMode);
+  }
+
+  data.sort((a,b) => {
+    const va = a[sortKey], vb = b[sortKey];
+    if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    return sortAsc ? va - vb : vb - va;
+  });
+
+  const totalCurrent = stocks.reduce((s,x) => s + x.current, 0);
+
+  document.getElementById('table-body').innerHTML = data.map(s => {
+    const sig = getSignal(s);
+    const barW = Math.min((s.current/totalCurrent)*100 * 3, 80);
+    return `
+      <tr class="row-${sig.mode}" data-mode="${sig.mode}">
+        <td><span class="ticker">${s.ticker}</span></td>
+        <td>${s.qty % 1 === 0 ? s.qty : s.qty.toFixed(5)}</td>
+        <td>${fmt$(s.paid)}</td>
+        <td style="color:var(--accent)">${fmt$(s.current)}</td>
+        <td>$${s.avgPrice.toFixed(2)}</td>
+        <td style="color:${s.price>=s.avgPrice?'var(--green)':'var(--red)'}">$${s.price.toFixed(2)}</td>
+        <td>
+          <span class="${s.ret>=0?'pos':'neg'}" style="font-weight:600">${s.ret>=0?'+':''}${s.ret.toFixed(2)}%</span>
+          <span class="perf-bar" style="width:${Math.min(Math.abs(s.ret)*1.5,60)}px;background:${s.ret>=0?'var(--green)':'var(--red)'}"></span>
+        </td>
+        <td>
+          ${s.weight.toFixed(1)}%
+          <span class="weight-bar-bg"><span class="weight-bar-fill" style="width:${barW}px"></span></span>
+        </td>
+        <td><span class="badge ${sig.cls}">${sig.label}</span></td>
+      </tr>`;
+  }).join('');
+}
+
+function sortTable(key) {
+  if (sortKey === key) sortAsc = !sortAsc; else { sortKey = key; sortAsc = false; }
+  document.querySelectorAll('th').forEach(th => th.classList.remove('sorted'));
+  event.target.closest('th').classList.add('sorted');
+  renderTable();
+}
+
+function filterTable(mode, btn) {
+  filterMode = mode;
+  document.querySelectorAll('.fb').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function fmt$(v) {
+  return '$' + Number(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+loadData();
+// Auto-refresh every 5 minutes
+setInterval(loadData, 5 * 60 * 1000);
+</script>
+</body>
+</html>
